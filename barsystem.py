@@ -348,7 +348,7 @@ class SistemaBar:
         self.salvar_dados()
         return total
     
-    def listar_produtos(self, categoria: str = None) -> List[Produto]:
+    def consultar_produtos(self, categoria: str = None) -> List[Produto]:
         """Lista os produtos disponíveis, opcionalmente filtrando por categoria."""
         if categoria:
             return [p for p in self.produtos.values() if p.categoria == categoria]
@@ -877,7 +877,7 @@ class InterfaceTerminal:
             return
         
         # Listar produtos disponíveis
-        produtos = self.sistema.listar_produtos()
+        produtos = self.sistema.consultar_produtos()
         
         if not produtos:
             input("Não há produtos cadastrados. Pressione Enter para continuar...")
@@ -1054,7 +1054,7 @@ class InterfaceTerminal:
             self.limpar_tela()
             self.imprimir_titulo("GESTÃO DE PRODUTOS E ESTOQUE")
             print("1. Cadastrar Novo Produto")
-            print("2. Listar Produtos")
+            print("2. Consultar Produtos")
             print("3. Editar Produto")
             print("4. Atualizar Estoque")
             print("5. Remover Produto")
@@ -1066,7 +1066,7 @@ class InterfaceTerminal:
             if opcao == "1":
                 self.cadastrar_produto()
             elif opcao == "2":
-                self.listar_produtos()
+                self.consultar_produtos()
             elif opcao == "3":
                 self.editar_produto()
             elif opcao == "4":
@@ -1121,14 +1121,14 @@ class InterfaceTerminal:
             print("Valor inválido.")
             input("Pressione Enter para continuar...")
     
-    def listar_produtos(self):
+    def consultar_produtos(self):
         self.limpar_tela()
         self.imprimir_titulo("LISTAGEM DE PRODUTOS")
         
         # Pedir categoria opcional
         categoria = input("Filtrar por categoria (deixe em branco para listar todos): ")
         
-        produtos = self.sistema.listar_produtos(categoria if categoria else None)
+        produtos = self.sistema.consultar_produtos(categoria if categoria else None)
         
         if not produtos:
             print("Nenhum produto encontrado.")
