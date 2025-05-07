@@ -392,27 +392,7 @@ class SistemaBar:
         del self.mesas[numero_mesa]
         self.salvar_dados()
         return True
-    
-    def remover_item_comanda(self, comanda_id: int, produto_id: int, quantidade: int):
-        """Remove um item de uma comanda existente."""
 
-        if comanda_id not in self.comandas or produto_id not in self.produtos:
-            return False
-        comanda = self.comandas[comanda_id]
-        if comanda.status != "aberta":
-            return False # Não pode remover itens de uma comanda fechada
-        # Procura o item na comanda
-        for item in comanda.itens:
-            if item.produto_id == produto_id:
-                # Devolve ao estoque
-                self.produtos[produto_id].estoque += min(quantidade, item.quantidade)
-                # Remove o item da comanda
-                resultado = comanda.remover_item(produto_id, quantidade)
-                self.salvar_dados()
-                return resultado
-            
-            return False
-    
 class InterfaceTerminal:
 
     def linha_simples(self):
@@ -568,12 +548,12 @@ class InterfaceTerminal:
     
         print(f"Produtos com estoque baixo de {limite} unidades:")
         print(f"{'ID':<5} {'Nome':<20} {'Categoria':<15} {'Estoque':<10}")
-        print("-" * 50)
+        print(self.linha_separadora())
 
         for produto in produtos_baixo_estoque:
             print(f"{produto.id:<15} {produto.nome:<20} {produto.categoria:<15} {produto.estoque:<10}")
 
-        print("=" * 50)
+        print(self.linha_separadora())
         input("Pressione Enter para continuar...")
 
     def relatorio_comandas_dia(self):
@@ -602,7 +582,7 @@ class InterfaceTerminal:
 
         print(f"Comandas registradas hoje ({hoje}):")
         print(f"{'ID':<5} {'Nome':<20} {'Hora Abertura':<20} {'Hora Fechamento':<20} {'Total':<10}")
-        print("-" * 70)
+        print(self.linha_separadora())
 
         for comanda in Comandas_dia:
             total = comanda.calcular_total()
@@ -611,7 +591,7 @@ class InterfaceTerminal:
 
             print(f"{comanda.id:<5} {comanda.mesa:<5} {status:<10} {comanda.hora_abertura:<20} {hora_fechamento:<20} R${total:<8.2f}")
 
-        print("=" * 70)
+        print(self.linha_separadora())
         input("Pressione Enter para continuar...")
 
 
@@ -666,7 +646,7 @@ class InterfaceTerminal:
         if produtos_vendidos:
             print("\nProdutos mais vendidos:")
             print(f"{'Nome':<20} {'Quantidade':<10} {'Total':<10}")
-            print("-" * 40)
+            print(self.linha_separadora())
 
             # Oderna por quantidade
             produtos_odernados = sorted(
@@ -678,7 +658,7 @@ class InterfaceTerminal:
             for _, produto in produtos_odernados:
                 print(f"{produto['nome']:<20}{produto['quantidade']:<10} R${produto['total']:<8.2f}")
 
-        print("=" * 50)
+        print(self.linha_separadora())
         input("Pressione Enter para continuar...")
 
     def atualizar_estoque(self):
@@ -804,37 +784,93 @@ class InterfaceTerminal:
         print("Digite 'c' ou 'cancelar' a qualquer momento para voltar.")
 
         try:
-            mesa_id_input = input("Digite o ID da mesa: ")
+            # Lista mesas ocupadas
+            mesas_ocupadas = self.sistema.listar_mesas_ocupadas()
+            if not mesas_ocupadas:
+                input("Não há mesas ocupadas. Pressione Enter para continuar...")
+                return
+            
+            print("Mesas Ocupadas:", ", ".join(map(str, mesas_ocupadas)))
+
+            mesa_id_input = input("Digite o número da mesa: ")
             if mesa_id_input.lower() in ["c", "cancelar"]:
                 print("Operação cancelada.")
                 input("Pressione Enter para continuar...")
                 return
             
             mesa_id = int(mesa_id_input)
-            comanda = self.sistema.consultar_produtos(mesa_id)
+            comanda = self.sistema.obter_comanda_por_mesa(mesa_id)
+            
             if not comanda:
                 print("Mesa não encontrada ou sem comanda.")
                 input("Pressione Enter para continuar...")
                 return
-            self.imprimir_comanda(comanda)
 
-            item_id_input = input("Digite o ID do item a ser removido: ")
+            # Mostra os itens da comanda
+            self.limpar_tela()
+            print(self.linha_separadora())
+            print(f"Comanda #{comanda.id} - Mesa {comanda.mesa}")
+            print(f"Aberta em: {comanda.hora_abertura}")
+            print(self.linha_separadora())
             
+            if not comanda.itens:
+                print("Não há itens na comanda.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            print(f"{'ID':<5} {'Qtd':<5} {'Produto':<30} {'Preço Unit.':<15} {'Subtotal':<15}")
+            print(self.linha_simples())
+            
+            for i, item in enumerate(comanda.itens, 1):
+                print(f"{i:<5} {item.quantidade:<5} {item.nome_produto:<30} R${item.preco_unitario:<13.2f} R${item.subtotal:<13.2f}")
+            
+            print(self.linha_simples())
+            print(f"{'TOTAL:':<36} R${comanda.calcular_total():<13.2f}")
+            print(self.linha_separadora())
+
+            item_id_input = input("Digite o número do item a ser removido: ")
             if item_id_input.lower() in ["c", "cancelar"]:
                 print("Operação cancelada.")
                 input("Pressione Enter para continuar...")
                 return
             
             item_id = int(item_id_input)
-            if item_id not in comanda:
+            if item_id < 1 or item_id > len(comanda.itens):
                 print("Item não encontrado na comanda.")
                 input("Pressione Enter para continuar...")
                 return
+
+            item = comanda.itens[item_id - 1]
+            quantidade_input = input(f"Digite a quantidade a remover (máx: {item.quantidade}): ")
+            if quantidade_input.lower() in ["c", "cancelar"]:
+                print("Operação cancelada.")
+                input("Pressione Enter para continuar...")
+                return
             
+            quantidade = int(quantidade_input)
+            if quantidade <= 0 or quantidade > item.quantidade:
+                print("Quantidade inválida.")
+                input("Pressione Enter para continuar...")
+                return
+
+            confirmar = input(f"Confirma a remoção de {quantidade}x {item.nome_produto}? (s/n): ")
+            if confirmar.lower() != "s":
+                print("Operação cancelada.")
+                input("Pressione Enter para continuar...")
+                return
+
+            resultado = self.sistema.remover_item_comanda(comanda.id, item.produto_id, quantidade)
+            
+            if resultado:
+                print(f"{quantidade}x {item.nome_produto} removido(s) com sucesso.")
+            else:
+                print("Erro ao remover item da comanda.")
+            
+            input("Pressione Enter para continuar...")
+
         except ValueError:
             print("Valor inválido.")
             input("Pressione Enter para continuar...")
-            return 
 
     def executar(self):
         while self.running:
@@ -914,16 +950,24 @@ class InterfaceTerminal:
     def abrir_comanda(self):
         self.limpar_tela()
         self.imprimir_titulo("ABRIR COMANDA")
-        
+        print("Digite 'c' ou 'cancelar' a qualquer momento para voltar.")
+
         # Lista mesas livres
         mesas_livres = self.sistema.listar_mesas_livres()
+
         if not mesas_livres:
             input("Não há mesas livres. Pressione Enter para continuar...")
             return
         
         print("Mesas Livres:", ", ".join(map(str, mesas_livres)))
         
-        mesa = int(input("Digite o número da mesa: "))
+        mesas_livres_input = input("Digite o número da mesa: ")
+        if mesas_livres_input in ['c', 'cancelar']:
+            print("Operação cancelada.")
+            input("Pressione Enter para continuar...")
+            return
+
+        mesa = int(mesas_livres_input)
         
         if mesa not in mesas_livres:
             input("Mesa inválida ou ocupada. Pressione Enter para continuar...")
@@ -1077,7 +1121,7 @@ class InterfaceTerminal:
         print("Mesas Ocupadas:", ", ".join(map(str, mesas_ocupadas)))
 
         comandas_input = input("Digite o número da mesa: ").strip().lower()
-        if comandas_input in ['c', 'caelar']:
+        if comandas_input in ['c', 'cancelar']:
             print("Operação cancelada.")
             input("Pressione Enter para continuar...")
             return
@@ -1224,13 +1268,50 @@ class InterfaceTerminal:
             input("Pressione Enter para continuar...")
             return
         
-        print(f"{'ID':<5} {'Nome':<20} {'Preço':<10} {'Categoria':<15} {'Estoque':<10}")
-        print("-" * 60)
+        # Define as larguras das colunas
+        colunas = {
+            'id': 5,
+            'nome': 30,
+            'preco': 12,
+            'categoria': 20,
+            'estoque': 10
+        }
         
+        # Cria o cabeçalho
+        cabecalho = (
+            f"{'ID':<{colunas['id']}} "
+            f"{'Nome':<{colunas['nome']}} "
+            f"{'Preço':<{colunas['preco']}} "
+            f"{'Categoria':<{colunas['categoria']}} "
+            f"{'Estoque':<{colunas['estoque']}}"
+        )
+        
+        # Cria a linha separadora
+        separador = "-" * (sum(colunas.values()) + 4)  # +4 para os espaços entre colunas
+        
+        # Imprime o cabeçalho
+        print(separador)
+        print(cabecalho)
+        print(separador)
+        
+        # Imprime os produtos
         for produto in produtos:
-            print(f"{produto.id:<5} {produto.nome:<20} R${produto.preco:<8.2f} {produto.categoria:<15} {produto.estoque:<10}")
+            # Trunca o nome se for muito longo
+            nome = produto.nome
+            if len(nome) > colunas['nome']:
+                nome = nome[:colunas['nome']-3] + "..."
+            
+            # Formata a linha do produto
+            linha = (
+                f"{produto.id:<{colunas['id']}} "
+                f"{nome:<{colunas['nome']}} "
+                f"R${produto.preco:<{colunas['preco']-2}.2f} "
+                f"{produto.categoria:<{colunas['categoria']}} "
+                f"{produto.estoque:<{colunas['estoque']}}"
+            )
+            print(linha)
         
-        print("-" * 60)
+        print(separador)
         input("Pressione Enter para continuar...")
     
     def editar_produto(self):
