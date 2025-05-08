@@ -1376,16 +1376,15 @@ class InterfaceTerminal:
         self.imprimir_titulo("EXPORTAR TODOS RELATÓRIOS")
 
         try:
-            # Verificar se o pandas estar disponivel
+            # Verificar se o pandas está disponível
             data_atual = datetime.now().strftime("%d-%m-%y")
             nome_arquivo = f"relatorios_bar_{data_atual}.xlsx"
 
-            #Cria um objeto ExcelWriter para salvar múltiplas planilhas
+            # Cria um objeto ExcelWriter para salvar múltiplas planilhas
             with pd.ExcelWriter(nome_arquivo) as writer:
-
-                # 1. Relatório de Vendas
+                # 1. Relatório de Estoque Baixo
                 limite = 10
-                produto_baixo_estoque = []
+                produtos_baixo_estoque = []
                 for produto in self.sistema.produtos.values():
                     if produto.estoque < limite:
                         produto_dict = {
@@ -1395,21 +1394,20 @@ class InterfaceTerminal:
                             "Preço": f"R$ {produto.preco:.2f}",
                             "Estoque": produto.estoque
                         }
-                        produto_baixo_estoque.append(produto_dict)
+                        produtos_baixo_estoque.append(produto_dict)
 
-                if produto_baixo_estoque:
-                    df_estoque_baixo = pd.DataFrame(produto_baixo_estoque)
+                if produtos_baixo_estoque:
+                    df_estoque_baixo = pd.DataFrame(produtos_baixo_estoque)
                     df_estoque_baixo.to_excel(writer, sheet_name='Estoque Baixo', index=False)
                 else:
                     df_estoque = pd.DataFrame({"Mensagem": [f"Não há produtos com estoque abaixo de {limite} unidades."]})
                     df_estoque.to_excel(writer, sheet_name='Estoque Baixo', index=False)
-            
-            # 2. Relatório de comandas do dia
-            hoje = datetime.now().strftime("%d-%m-%y")
 
-            comandas_dia = []
-            for comanda in self.sistema.comandas.values():
-                if hoje[:5] in comanda.hora_abertura:
+                # 2. Relatório de comandas do dia
+                hoje = datetime.now().strftime("%d/%m/%y")
+                comandas_dia = []
+                for comanda in self.sistema.comandas.values():
+                    if hoje[:5] in comanda.hora_abertura:
                         comanda_dict = {
                             "ID": comanda.id,
                             "Mesa": comanda.mesa,
@@ -1419,144 +1417,101 @@ class InterfaceTerminal:
                             "Total": f"R$ {comanda.calcular_total():.2f}"
                         }
                         comandas_dia.append(comanda_dict)
-            
-            if comandas_dia:
-                df_comandas = pd.DataFrame(comandas_dia)
-                df_comandas.to_excel(writer, sheet_name='Comandas do Dia', index=False)
 
-                # 2.1 Itens das comandas do dia
-                itens_comandas =[]
-                for comanda in self.sistema.comandas.values():
-                    if hoje[:5] in comanda.hora_abertura:
-                        for item in comanda.itens:
-                            item_dict = {
-                                "Comanda ID": comanda.id,
-                                "Mesa": comanda.mesa,
-                                "Produto": item.nome_produto,
-                                "Quantidade": item.quantidade,
-                                "Preço Unitário": f"R$ {item.preco_unitario:.2f}",
-                                "Subtotal": f"R$ {item.subtotal:.2f}"
-                            }
-                            itens_comandas.append(item_dict)
-                
-                if itens_comandas:
-                    df_comandas = pd.DataFrame(itens_comandas)
-                    df_comandas.to_excel(writer, sheet_name='Itens das Comandas', index=False)
+                if comandas_dia:
+                    df_comandas = pd.DataFrame(comandas_dia)
+                    df_comandas.to_excel(writer, sheet_name='Comandas do Dia', index=False)
 
-            else:
-                df_comandas = pd.DataFrame({"Mensagem": [f"Não há comandas registradas hoje ({hoje})."]})
-                df_comandas.to_excel(writer, sheet_name='Comandas do Dia', index=False)
+                    # 2.1 Itens das comandas do dia
+                    itens_comandas = []
+                    for comanda in self.sistema.comandas.values():
+                        if hoje[:5] in comanda.hora_abertura:
+                            for item in comanda.itens:
+                                item_dict = {
+                                    "Comanda ID": comanda.id,
+                                    "Mesa": comanda.mesa,
+                                    "Produto": item.nome_produto,
+                                    "Quantidade": item.quantidade,
+                                    "Preço Unitário": f"R$ {item.preco_unitario:.2f}",
+                                    "Subtotal": f"R$ {item.subtotal:.2f}"
+                                }
+                                itens_comandas.append(item_dict)
 
-            # 3. Relatório de vendas do dia
-            comandas_fechadas = []
-            for comanda in self.sistema.comandas.values():
-                if comanda.status == "fechada" and comanda.hora_fechamento and hoje[:5] in comanda.hora_fechamento:
-                    comanda_dict = {
-                        "ID": comanda.id,
-                        "Mesa": comanda.mesa,
-                        "Hora Abertura": comanda.hora_abertura,
-                        "Hora Fechamento": comanda.hora_fechamento,
-                        "Total": f"R$ {comanda.calcualar_total():.2f}"
-                    }
-                    comandas_fechadas.append(comanda_dict)
+                    if itens_comandas:
+                        df_itens = pd.DataFrame(itens_comandas)
+                        df_itens.to_excel(writer, sheet_name='Itens das Comandas', index=False)
+                else:
+                    df_comandas = pd.DataFrame({"Mensagem": [f"Não há comandas registradas hoje ({hoje})."]})
+                    df_comandas.to_excel(writer, sheet_name='Comandas do Dia', index=False)
 
-            if comandas_fechadas:
-                df_vendas = pd.DataFrame(comandas_fechadas)
-                df_comandas.to_excel(writer, sheet_name='Vendas do Dia', index=False)
-
-                # 3.1 Resumo de vendas
-                total_vendas =sum(comanda.calcular_total() for comanda in self.sistema.comandas.values()
-                                  if comanda.status == "fechada" and comanda.hora_fechamento and hoje[:5] in comanda.hora_fechamento)
-                quantidade_comandas = len(comandas_fechadas)
-                ticket_medio = total_vendas / quantidade_comandas if quantidade_comandas > 0 else 0
-
-                df_resumo = pd.DataFrame({
-                    "Métrica": ["Total de Vendas", "Quantidade de Comandas", "Ticket Médio"],
-                    "Valor": [f"R$ {total_vendas:.2f}", quantidade_comandas, f"R$ {ticket_medio:.2f}"]
-                })
-                df_resumo.to_excel(writer, sheet_name='Resumo', index=False)
-
-                # 3.2 Produtos mais vendidos
-                produto_vendidos = {}
+                # 3. Relatório de vendas do dia
+                comandas_fechadas = []
                 for comanda in self.sistema.comandas.values():
                     if comanda.status == "fechada" and comanda.hora_fechamento and hoje[:5] in comanda.hora_fechamento:
-                        for item in comanda.itens:
-                            if item.produto_id not in produto_vendidos:
-                                produto_vendidos[item.produto_id] = {
-                                    "nome": item.nome_produto,
-                                    "quantidade": 0,
-                                    "total": 0
-                                }
-                            produto_vendidos[item.produto_id]["quantidade"] += item.quantidade
-                            produto_vendidos[item.produto_id]["total"] += item.subtotal
+                        comanda_dict = {
+                            "ID": comanda.id,
+                            "Mesa": comanda.mesa,
+                            "Hora Abertura": comanda.hora_abertura,
+                            "Hora Fechamento": comanda.hora_fechamento,
+                            "Total": f"R$ {comanda.calcular_total():.2f}"
+                        }
+                        comandas_fechadas.append(comanda_dict)
 
-                if produto_vendidos:
-                    produtos_lista = []
-                    for pid, p in produto_vendidos.items():
-                        produtos_lista.append({
-                            "ID": pid,
-                            "Produto": p["nome"],
-                            "Quantidade": p["quantidade"],
-                            "Total": f"R$ {p['total']:.2f}"
-                        })
-                            
-                    df_produtos = pd.DataFrame(produtos_lista)
-                    df_produtos = df_produtos.sort_values(by="Quantidade", ascending=False)
-                    df_produtos.to_excel(writer, sheet_name='Produtos Vendidos', index=False)
+                if comandas_fechadas:
+                    df_vendas = pd.DataFrame(comandas_fechadas)
+                    df_vendas.to_excel(writer, sheet_name='Vendas do Dia', index=False)
 
-            else:
-                df_vendas = pd.DataFrame({"Mensagem": [f"Não há comandas fechadas registradas hoje ({hoje})."]})
-                df_vendas.to_excel(writer, sheet_name='Vendas do Dia', index=False)
-                
-                df_resumo = pd.DataFrame({"Mensagem": ["Sem dados de venda para hoje."]})                    
-                df_resumo.to_excel(writer, sheet_name='Resumo de Vendas', index=False)
+                    # 3.1 Resumo de vendas
+                    total_vendas = sum(comanda.calcular_total() for comanda in self.sistema.comandas.values()
+                                     if comanda.status == "fechada" and comanda.hora_fechamento and hoje[:5] in comanda.hora_fechamento)
+                    quantidade_comandas = len(comandas_fechadas)
+                    ticket_medio = total_vendas / quantidade_comandas if quantidade_comandas > 0 else 0
 
-            # 4. Relatório de comandas
-            todos_produtos = []
-            for produtos in self.sistema.produtos.values():
-                produto_dict = {
-                    "ID": produtos.id,
-                    "Nome": produtos.nome,
-                    "Categoria": produtos.categoria,
-                    "Preço": f"R$ {produtos.preco:.2f}",
-                    "Estoque": produtos.estoque,
-                    "Valor em Estoque": f"R$ {produto.preco * produtos.estoque:.2f}"
-                }
-                todos_produtos.append(produto_dict)
+                    df_resumo = pd.DataFrame({
+                        "Métrica": ["Total de Vendas", "Quantidade de Comandas", "Ticket Médio"],
+                        "Valor": [f"R$ {total_vendas:.2f}", quantidade_comandas, f"R$ {ticket_medio:.2f}"]
+                    })
+                    df_resumo.to_excel(writer, sheet_name='Resumo de Vendas', index=False)
 
-            if todos_produtos:
-                df_produtos = pd.DataFrame(todos_produtos)
-                df_produtos.to_excel(writer, sheet_name='Invetário Completo', index=False)
-            else:
-                df_produtos = pd.DataFrame({"Mensagem": ["Não há produtos cadastrados no sistema."]})
-                df_produtos.to_excel(writer, sheet_name='Invetário Completo', index=False)
+                    # 3.2 Produtos mais vendidos
+                    produtos_vendidos = {}
+                    for comanda in self.sistema.comandas.values():
+                        if comanda.status == "fechada" and comanda.hora_fechamento and hoje[:5] in comanda.hora_fechamento:
+                            for item in comanda.itens:
+                                if item.produto_id not in produtos_vendidos:
+                                    produtos_vendidos[item.produto_id] = {
+                                        "nome": item.nome_produto,
+                                        "quantidade": 0,
+                                        "total": 0
+                                    }
+                                produtos_vendidos[item.produto_id]["quantidade"] += item.quantidade
+                                produtos_vendidos[item.produto_id]["total"] += item.subtotal
 
-            # 5. Relatório de Mesas
-            mesas_info = []
-            for mesa_id, comanda_id in self.sistema.mesas.items():
-                status = "Ocupada" if comanda_id else "Livre"
-                comanda_info = ""
-                if comanda_id:
-                    comanda = self.sistema.comandas.get(comanda_id)
-                    if comanda:
-                        comanda_info = f"Comanda #{comanda.id}, Aberta em: {comanda.hora_abertura}, Total: R$ {comanda.calcular_total():.2f}"
+                    if produtos_vendidos:
+                        produtos_lista = []
+                        for pid, p in produtos_vendidos.items():
+                            produtos_lista.append({
+                                "ID": pid,
+                                "Produto": p["nome"],
+                                "Quantidade": p["quantidade"],
+                                "Total": f"R$ {p['total']:.2f}"
+                            })
 
-                mesa_dict = {
-                    "Número": mesa_id,
-                    "Status": status,
-                    "Informações": comanda_info
-                }
-                mesas_info.append(mesa_dict)
-
-                df_mesas = pd.DataFrame(mesas_info)
-                df_mesas.to_excel(writer, sheet_name='Status das Mesas', index=False)
+                        df_produtos = pd.DataFrame(produtos_lista)
+                        df_produtos = df_produtos.sort_values(by="Quantidade", ascending=False)
+                        df_produtos.to_excel(writer, sheet_name='Produtos Vendidos', index=False)
+                else:
+                    df_vendas = pd.DataFrame({"Mensagem": [f"Não há comandas fechadas registradas hoje ({hoje})."]})
+                    df_vendas.to_excel(writer, sheet_name='Vendas do Dia', index=False)
+                    df_resumo = pd.DataFrame({"Mensagem": ["Sem dados de venda para hoje."]})
+                    df_resumo.to_excel(writer, sheet_name='Resumo de Vendas', index=False)
 
             print(f"Relatórios exportados com sucesso para o arquivo: {nome_arquivo}")
             print(f"Local do arquivo: {os.path.abspath(nome_arquivo)}")
-    
+
         except ImportError:
             print("Erro: A biblioteca pandas não está instalada.")
-            print("Por favor, instale-a usando o comando: pip3 install pandas")
+            print("Por favor, instale-a usando o comando: pip install pandas")
         except Exception as e:
             print(f"Erro ao exportar relatórios: {e}")
 
