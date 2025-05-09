@@ -985,6 +985,7 @@ class InterfaceTerminal:
     def adicionar_produtos_comanda(self):
         self.limpar_tela()
         self.imprimir_titulo("ADICIONAR PRODUTOS À COMANDA")
+        print("Digite 'c' ou 'cancelar' a qualquer momento para voltar.")
         
         # Lista mesas ocupadas
         mesas_ocupadas = self.sistema.listar_mesas_ocupadas()
@@ -993,8 +994,14 @@ class InterfaceTerminal:
             return
         
         print("Mesas Ocupadas:", ", ".join(map(str, mesas_ocupadas)))
+
+        mesa_input = input("Digite o número da mesa: ").strip().lower()
+        if mesa_input in ['c', 'cancelar']:
+            print("Operação cancelada")
+            input("Pressione Enter para continuar...")
+            return
         
-        mesa = int(input("Digite o número da mesa: "))
+        mesa = int(mesa_input)
         
         if mesa not in mesas_ocupadas:
             input("Mesa inválida ou não ocupada. Pressione Enter para continuar...")
