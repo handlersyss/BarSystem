@@ -12,8 +12,9 @@ class InterfaceBarPersonalizada(InterfaceTerminal):
         self.imprimir_titulo(self.nome_sistema)
         print("1. Gestão de Mesas")
         print("2. Gestão de Produtos e Estoque")
-        print("3. Relatórios")
-        print("4. Logout")
+        print("3. Venda Rápida")
+        print("4. Relatórios")
+        print("5. Logout")
         print("0. Sair")
         print(self.linha_separadora())
         
@@ -24,8 +25,10 @@ class InterfaceBarPersonalizada(InterfaceTerminal):
         elif opcao == "2":
             self.menu_produtos()
         elif opcao == "3":
-            self.menu_relatorios()
+            self.venda_rapida()
         elif opcao == "4":
+            self.menu_relatorios()
+        elif opcao == "5":
             self.running = False
             return "logout"  # Sinaliza que o usuário deseja fazer logout
         elif opcao == "0":
