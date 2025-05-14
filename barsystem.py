@@ -1,5 +1,6 @@
 import os
 import json
+import sqlite3
 import datetime
 import shutil
 import pandas as pd
@@ -121,97 +122,137 @@ class Comanda:
             hora_abertura=data["hora_abertura"]
         )
         comanda.hora_fechamento = data.get("hora_fechamento")
-        
         for item_data in data.get("itens", []):
             item = ItemComanda.from_dict(item_data)
             comanda.itens.append(item)
-        
         return comanda
+
+
+class VendaRapida:
+    def __init__(self):
+        self.itens: List[ItemComanda] = []
+        self.hora_venda = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    
+    def adicionar_item(self, item: ItemComanda):
+        # Verifica se o item já existe na venda
+        for i, item_existente in enumerate(self.itens):
+            if item_existente.produto_id == item.produto_id:
+                # Atualiza a quantidade do item existente
+                self.itens[i].quantidade += item.quantidade
+                self.itens[i].subtotal = self.itens[i].quantidade * self.itens[i].preco_unitario
+                return
+        
+        # Se o item não existir, adiciona à lista
+        self.itens.append(item)
+    
+    def remover_item(self, produto_id: int, quantidade: int = 1):
+        for i, item in enumerate(self.itens):
+            if item.produto_id == produto_id:
+                if item.quantidade <= quantidade:
+                    # Remove o item completamente
+                    self.itens.pop(i)
+                else:
+                    # Reduz a quantidade
+                    self.itens[i].quantidade -= quantidade
+                    self.itens[i].subtotal = self.itens[i].quantidade * self.itens[i].preco_unitario
+                return True
+        return False
+    
+    def calcular_total(self):
+        return sum(item.subtotal for item in self.itens)
 
 
 class SistemaBar:
     def __init__(self):
+        self.db_path = 'bar_system.db'
         self.produtos: Dict[int, Produto] = {}
         self.comandas: Dict[int, Comanda] = {}
         self.mesas: Dict[int, Optional[int]] = {}  # mesa_id -> comanda_id (None se mesa livre)
         self.proximo_id_produto = 1
         self.proximo_id_comanda = 1
+        self.carregar_dados()
         
         # Inicializa o sistema com algumas mesas
         for i in range(1, 11):
             self.mesas[i] = None
-        
-        # Carrega dados se existirem
-        self.carregar_dados()
 
-    def atualizar_estoque(self, produto_id, estoque):
-        return self.editar_produto(produto_id, estoque=estoque)
-        
-    def salvar_dados(self):
-        """Salva os dados do sistema em arquivos JSON."""
-        os.makedirs("dados", exist_ok=True)
-        
-        # Salva produtos
-        with open("dados/produtos.json", "w", encoding="utf-8") as f:
-            produtos_dict = {str(pid): p.to_dict() for pid, p in self.produtos.items()}
-            json.dump(produtos_dict, f, ensure_ascii=False, indent=2)
-        
-        # Salva comandas
-        with open("dados/comandas.json", "w", encoding="utf-8") as f:
-            comandas_dict = {str(cid): c.to_dict() for cid, c in self.comandas.items()}
-            json.dump(comandas_dict, f, ensure_ascii=False, indent=2)
-        
-        # Salva mesas
-        with open("dados/mesas.json", "w", encoding="utf-8") as f:
-            json.dump(self.mesas, f, ensure_ascii=False, indent=2)
-        
-        # Salva contadores
-        with open("dados/contadores.json", "w", encoding="utf-8") as f:
-            json.dump({
-                "proximo_id_produto": self.proximo_id_produto,
-                "proximo_id_comanda": self.proximo_id_comanda
-            }, f, ensure_ascii=False, indent=2)
-
+    def _get_connection(self):
+        return sqlite3.connect(self.db_path)
+    
     def carregar_dados(self):
-        """Carrega os dados do sistema a partir de arquivos JSON."""
         try:
-            # Carrega produtos
-            if os.path.exists("dados/produtos.json"):
-                with open("dados/produtos.json", "r", encoding="utf-8") as f:
-                    produtos_dict = json.load(f)
-                    self.produtos = {int(pid): Produto.from_dict(p) for pid, p in produtos_dict.items()}
-            
-            # Carrega comandas
-            if os.path.exists("dados/comandas.json"):
-                with open("dados/comandas.json", "r", encoding="utf-8") as f:
-                    comandas_dict = json.load(f)
-                    self.comandas = {int(cid): Comanda.from_dict(c) for cid, c in comandas_dict.items()}
-            
-            # Carrega mesas
-            if os.path.exists("dados/mesas.json"):
-                with open("dados/mesas.json", "r", encoding="utf-8") as f:
-                    mesas_dict = json.load(f)
-                    self.mesas = {int(mid): cid for mid, cid in mesas_dict.items()}
-            
-            # Carrega contadores
-            if os.path.exists("dados/contadores.json"):
-                with open("dados/contadores.json", "r", encoding="utf-8") as f:
-                    contadores = json.load(f)
-                    self.proximo_id_produto = contadores.get("proximo_id_produto", 1)
-                    self.proximo_id_comanda = contadores.get("proximo_id_comanda", 1)
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+
+                # Carregar produtos
+                cursor.execute('SELECT id, nome, preco, categoria, estoque FROM produtos')
+                for row in cursor.fetchall():
+                    produto = Produto(id=row[0], nome=row[1], preco=row[2], categoria=row[3], estoque=row[4])
+                    self.produtos[produto.id] = produto
+                
+                # Carregar comandas
+                cursor.execute('SELECT id, mesa, status, hora_abertura, hora_fechamento FROM comandas')
+                for row in cursor.fetchall():
+                    comanda = Comanda(id=row[0], mesa=row[1], status=row[2], hora_abertura=row[3])
+                    comanda.hora_fechamento = row[4]
+                    self.comandas[comanda.id] = comanda
+                
+                # Carregar itens das comandas
+                cursor.execute('SELECT comanda_id, produto_id, quantidade, nome_produto, preco_unitario, subtotal FROM itens_comanda')
+                for row in cursor.fetchall():
+                    item = ItemComanda(produto_id=row[1], quantidade=row[2], nome_produto=row[3], preco_unitario=row[4])
+                    if row[0] in self.comandas:
+                        self.comandas[row[0]].itens.append(item)
+                
+                # Carregar mesas
+                cursor.execute('SELECT id, comanda_id FROM mesas')
+                for row in cursor.fetchall():
+                    self.mesas[row[0]] = row[1]
+                
+                # Carregar contadores
+                cursor.execute('SELECT nome, valor FROM contadores')
+                for row in cursor.fetchall():
+                    if row[0] == 'proximo_id_produto':
+                        self.proximo_id_produto = row[1]
+                    elif row[0] == 'proximo_id_comanda':
+                        self.proximo_id_comanda = row[1]
+                
+                # Inicializar mesas se não existirem
+                if not self.mesas:
+                    for i in range(1, 11):
+                        self.mesas[i] = None
+                        cursor.execute('INSERT OR IGNORE INTO mesas (id, comanda_id) VALUES (?, ?)', (i, None))
+                    conn.commit()
         
-        except Exception as e:
+        except sqlite3.Error as e:
             print(f"Erro ao carregar dados: {e}")
             print("Iniciando com dados vazios.")
+
+    def salvar_dados(self):
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Salvar contadores
+                cursor.execute('''
+                    INSERT OR REPLACE INTO contadores (nome, valor)
+                    VALUES (?, ?)
+                ''', ('proximo_id_produto', self.proximo_id_produto))
+                cursor.execute('''
+                    INSERT OR REPLACE INTO contadores (nome, valor)
+                    VALUES (?, ?)
+                ''', ('proximo_id_comanda', self.proximo_id_comanda))
+                
+                conn.commit()
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao salvar dados: {e}")
     
     def adicionar_produto(self, nome: str, preco: float, categoria: str, estoque: int) -> Produto:
-        """Adiciona um novo produto ao sistema."""
-        # Encontrar o menor ID disponível
-
-        id_disponivel = 1
+        id_disponivel = self.proximo_id_produto
         while id_disponivel in self.produtos:
             id_disponivel += 1
-
+        
         produto = Produto(
             id=id_disponivel,
             nome=nome,
@@ -220,10 +261,23 @@ class SistemaBar:
             estoque=estoque
         )
         
-        self.produtos[produto.id] = produto
-        self.proximo_id_produto = max(self.proximo_id_produto, id_disponivel + 1)
-        self.salvar_dados()
-        return produto
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO produtos (id, nome, preco, categoria, estoque)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (produto.id, produto.nome, produto.preco, produto.categoria, produto.estoque))
+                conn.commit()
+                
+                self.produtos[produto.id] = produto
+                self.proximo_id_produto = max(self.proximo_id_produto, id_disponivel + 1)
+                self.salvar_dados()
+                return produto
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao adicionar produto: {e}")
+            return None
     
     def editar_produto(self, id: int, nome: str = None, preco: float = None, 
                      categoria: str = None, estoque: int = None) -> bool:
@@ -232,68 +286,90 @@ class SistemaBar:
             return False
         
         produto = self.produtos[id]
+        updates = {}
         
         if nome is not None:
             produto.nome = nome
+            updates['nome'] = nome
         
         if preco is not None:
             produto.preco = preco
+            updates['preco'] = preco
         
         if categoria is not None:
             produto.categoria = categoria
+            updates['categoria'] = categoria
         
         if estoque is not None:
             produto.estoque = estoque
+            updates['estoque'] = estoque
         
-        self.salvar_dados()
-        return True
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                query = 'UPDATE produtos SET ' + ', '.join(f'{k} = ?' for k in updates) + ' WHERE id = ?'
+                cursor.execute(query, list(updates.values()) + [id])
+                conn.commit()
+                return True
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao editar produto: {e}")
+            return False
     
     def remover_produto(self, id: int) -> bool:
         """Remove um produto do sistema."""
         if id not in self.produtos:
             return False
         
-        del self.produtos[id]
-        self.salvar_dados()
-        return True
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM produtos WHERE id = ?', (id,))
+                conn.commit()
+                del self.produtos[id]
+                return True
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao remover produto: {e}")
+            return False
     
     def abrir_comanda(self, mesa: int) -> Optional[Comanda]:
         """Abre uma nova comanda para uma mesa."""
-        if mesa not in self.mesas:
+        if mesa not in self.mesas or self.mesas[mesa] is not None:
             return None
         
-        if self.mesas[mesa] is not None:
-            return None  # Mesa já tem uma comanda aberta
+        comanda = Comanda(id=self.proximo_id_comanda, mesa=mesa)
+
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO comandas (id, mesa, status, hora_abertura)
+                    VALUES (?, ?, ?, ?)
+                ''', (comanda.id, comanda.mesa, comanda.status, comanda.hora_abertura))
+                cursor.execute('UPDATE mesas SET comanda_id = ? WHERE id = ?', (comanda.id, mesa))
+                conn.commit()
+                
+                self.comandas[comanda.id] = comanda
+                self.mesas[mesa] = comanda.id
+                self.proximo_id_comanda += 1
+                self.salvar_dados()
+                return comanda
         
-        comanda = Comanda(
-            id=self.proximo_id_comanda,
-            mesa=mesa
-        )
-        
-        self.comandas[comanda.id] = comanda
-        self.mesas[mesa] = comanda.id
-        self.proximo_id_comanda += 1
-        self.salvar_dados()
-        return comanda
+        except sqlite3.Error as e:
+            print(f"Erro ao abrir comanda: {e}")
+            return None
     
     def adicionar_item_comanda(self, comanda_id: int, produto_id: int, quantidade: int) -> bool:
-        """Adiciona um item a uma comanda existente."""
         if comanda_id not in self.comandas or produto_id not in self.produtos:
             return False
         
         comanda = self.comandas[comanda_id]
         produto = self.produtos[produto_id]
         
-        if comanda.status != "aberta":
-            return False  # Não pode adicionar itens a uma comanda fechada
+        if comanda.status != "aberta" or produto.estoque < quantidade:
+            return False
         
-        if produto.estoque < quantidade:
-            return False  # Estoque insuficiente
-        
-        # Atualiza o estoque
-        produto.estoque -= quantidade
-        
-        # Adiciona o item à comanda
         item = ItemComanda(
             produto_id=produto_id,
             quantidade=quantidade,
@@ -301,97 +377,170 @@ class SistemaBar:
             preco_unitario=produto.preco
         )
         
-        comanda.adicionar_item(item)
-        self.salvar_dados()
-        return True
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO itens_comanda (comanda_id, produto_id, quantidade, nome_produto, preco_unitario, subtotal)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (comanda_id, item.produto_id, item.quantidade, item.nome_produto, item.preco_unitario, item.subtotal))
+                cursor.execute('UPDATE produtos SET estoque = estoque - ? WHERE id = ?', (quantidade, produto_id))
+                conn.commit()
+                
+                produto.estoque -= quantidade
+                comanda.adicionar_item(item)
+                return True
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao adicionar item à comanda: {e}")
+            return False
     
     def remover_item_comanda(self, comanda_id: int, produto_id: int, quantidade: int) -> bool:
-        """Remove um item de uma comanda existente."""
         if comanda_id not in self.comandas or produto_id not in self.produtos:
             return False
         
         comanda = self.comandas[comanda_id]
-        
         if comanda.status != "aberta":
-            return False  # Não pode remover itens de uma comanda fechada
+            return False
         
-        # Procura o item na comanda
         for item in comanda.itens:
             if item.produto_id == produto_id:
-                # Devolve ao estoque
-                self.produtos[produto_id].estoque += min(quantidade, item.quantidade)
+                try:
+                    with self._get_connection() as conn:
+                        cursor = conn.cursor()
+                        if item.quantidade <= quantidade:
+                            cursor.execute('DELETE FROM itens_comanda WHERE comanda_id = ? AND produto_id = ?', (comanda_id, produto_id))
+                        else:
+                            cursor.execute('''
+                                UPDATE itens_comanda
+                                SET quantidade = quantidade - ?, subtotal = (quantidade - ?) * preco_unitario
+                                WHERE comanda_id = ? AND produto_id = ?
+                            ''', (quantidade, quantidade, comanda_id, produto_id))
+                        cursor.execute('UPDATE produtos SET estoque = estoque + ? WHERE id = ?', (min(quantidade, item.quantidade), produto_id))
+                        conn.commit()
+                        
+                        self.produtos[produto_id].estoque += min(quantidade, item.quantidade)
+                        return comanda.remover_item(produto_id, quantidade)
                 
-                # Remove o item da comanda
-                resultado = comanda.remover_item(produto_id, quantidade)
-                self.salvar_dados()
-                return resultado
-        
+                except sqlite3.Error as e:
+                    print(f"Erro ao remover item da comanda: {e}")
+                    return False
         return False
     
     def fechar_comanda(self, comanda_id: int) -> Optional[float]:
-        """Fecha uma comanda e retorna o valor total."""
-        if comanda_id not in self.comandas:
+        if comanda_id not in self.comandas or self.comandas[comanda_id].status != "aberta":
             return None
         
         comanda = self.comandas[comanda_id]
-        
-        if comanda.status != "aberta":
-            return None  # Comanda já está fechada
-        
-        # Fecha a comanda
         comanda.fechar_comanda()
-        
-        # Libera a mesa
-        self.mesas[comanda.mesa] = None
-        
         total = comanda.calcular_total()
-        self.salvar_dados()
-        return total
+        
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE comandas
+                    SET status = ?, hora_fechamento = ?
+                    WHERE id = ?
+                ''', (comanda.status, comanda.hora_fechamento, comanda_id))
+                cursor.execute('UPDATE mesas SET comanda_id = NULL WHERE comanda_id = ?', (comanda_id,))
+                conn.commit()
+                
+                self.mesas[comanda.mesa] = None
+                return total
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao fechar comanda: {e}")
+            return None
     
     def consultar_produtos(self, categoria: str = None) -> List[Produto]:
-        """Lista os produtos disponíveis, opcionalmente filtrando por categoria."""
         if categoria:
             return [p for p in self.produtos.values() if p.categoria == categoria]
         return list(self.produtos.values())
     
     def listar_comandas_abertas(self) -> List[Comanda]:
-        """Lista as comandas abertas."""
         return [c for c in self.comandas.values() if c.status == "aberta"]
     
     def listar_mesas_livres(self) -> List[int]:
-        """Lista as mesas sem comandas abertas."""
         return [mesa for mesa, comanda_id in self.mesas.items() if comanda_id is None]
     
     def listar_mesas_ocupadas(self) -> List[int]:
-        """Lista as mesas com comandas abertas."""
         return [mesa for mesa, comanda_id in self.mesas.items() if comanda_id is not None]
     
     def obter_comanda_por_mesa(self, mesa: int) -> Optional[Comanda]:
-        """Retorna a comanda associada a uma mesa, se existir."""
         if mesa not in self.mesas or self.mesas[mesa] is None:
             return None
-        
         comanda_id = self.mesas[mesa]
         return self.comandas.get(comanda_id)
     
     def adicionar_mesa(self, numero_mesa: int) -> bool:
-        """Adiciona uma nova mesa ao sistema."""
         if numero_mesa in self.mesas:
             return False
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO mesas (id, comanda_id) VALUES (?, ?)', (numero_mesa, None))
+                conn.commit()
+                
+                self.mesas[numero_mesa] = None
+                return True
         
-        """Adiciona a nova mesa (Inicialmente livre)"""
-        self.mesas[numero_mesa] = None
-        self.salvar_dados()
-        return True
+        except sqlite3.Error as e:
+            print(f"Erro ao adicionar mesa: {e}")
+            return False
     
     def remover_mesa(self, numero_mesa: int) -> bool:
-        """Remover uma mesa existente do sistema."""
         if numero_mesa not in self.mesas:
             return False
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM mesas WHERE id = ?', (numero_mesa,))
+                conn.commit()
+                
+                del self.mesas[numero_mesa]
+                return True
         
-        del self.mesas[numero_mesa]
-        self.salvar_dados()
-        return True
+        except sqlite3.Error as e:
+            print(f"Erro ao remover mesa: {e}")
+            return False
+
+    def registrar_venda_rapida(self, venda: VendaRapida) -> bool:
+        """Registra uma venda rápida no sistema."""
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # Cria uma comanda temporária para registrar a venda
+                comanda_id = self.proximo_id_comanda
+                cursor.execute('''
+                    INSERT INTO comandas (id, mesa, status, hora_abertura, hora_fechamento)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (comanda_id, 0, "fechada", venda.hora_venda, venda.hora_venda))
+                
+                # Registra os itens da venda
+                for item in venda.itens:
+                    cursor.execute('''
+                        INSERT INTO itens_comanda (comanda_id, produto_id, quantidade, nome_produto, preco_unitario, subtotal)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (comanda_id, item.produto_id, item.quantidade, item.nome_produto, item.preco_unitario, item.subtotal))
+                    
+                    # Atualiza o estoque no banco de dados
+                    cursor.execute('UPDATE produtos SET estoque = estoque - ? WHERE id = ?', 
+                                 (item.quantidade, item.produto_id))
+                    
+                    # Atualiza o estoque na memória
+                    if item.produto_id in self.produtos:
+                        self.produtos[item.produto_id].estoque -= item.quantidade
+                
+                conn.commit()
+                self.proximo_id_comanda += 1
+                self.salvar_dados()
+                return True
+                
+        except sqlite3.Error as e:
+            print(f"Erro ao registrar venda rápida: {e}")
+            return False
 
 class InterfaceTerminal:
 
@@ -879,6 +1028,7 @@ class InterfaceTerminal:
     def __init__(self):
         self.sistema = SistemaBar()
         self.running = True
+        self.venda_atual = None
 
     def limpar_tela(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -889,6 +1039,7 @@ class InterfaceTerminal:
         print("1. Gestão de Mesas")
         print("2. Gestão de Produtos e Estoque")
         print("3. Relatórios")
+        print("4. Venda Rápida")
         print("0. Sair")
         print(self.linha_separadora())
         
@@ -900,6 +1051,8 @@ class InterfaceTerminal:
             self.menu_produtos()
         elif opcao == "3":
             self.menu_relatorios()
+        elif opcao == "4":
+            self.venda_rapida()
         elif opcao == "0":
             self.running = False
         else:
@@ -1522,6 +1675,192 @@ class InterfaceTerminal:
         except Exception as e:
             print(f"Erro ao exportar relatórios: {e}")
 
+        input("Pressione Enter para continuar...")
+
+    def venda_rapida(self):
+        self.limpar_tela()
+        self.imprimir_titulo("VENDA RÁPIDA")
+        print("Digite 'c' ou 'cancelar' a qualquer momento para voltar.")
+        
+        if not self.venda_atual:
+            self.venda_atual = VendaRapida()
+        
+        while True:
+            self.limpar_tela()
+            print(self.linha_separadora())
+            print("VENDA ATUAL:")
+            print(self.linha_simples())
+            
+            if not self.venda_atual.itens:
+                print("Nenhum item adicionado.")
+            else:
+                print(f"{'Qtd':<5} {'Produto':<30} {'Preço Unit.':<15} {'Subtotal':<15}")
+                print(self.linha_simples())
+                
+                for item in self.venda_atual.itens:
+                    print(f"{item.quantidade:<5} {item.nome_produto:<30} R${item.preco_unitario:<13.2f} R${item.subtotal:<13.2f}")
+                
+                print(self.linha_simples())
+                print(f"{'TOTAL:':<36} R${self.venda_atual.calcular_total():<13.2f}")
+            
+            print(self.linha_separadora())
+            print("\n1. Adicionar Produto")
+            print("2. Remover Produto")
+            print("3. Finalizar Venda")
+            print("0. Cancelar Venda")
+            
+            opcao = input("\nEscolha uma opção: ")
+            
+            if opcao == "1":
+                self.adicionar_item_venda_rapida()
+            elif opcao == "2":
+                self.remover_item_venda_rapida()
+            elif opcao == "3":
+                self.finalizar_venda_rapida()
+                break
+            elif opcao == "0":
+                self.venda_atual = None
+                break
+            else:
+                input("Opção inválida. Pressione Enter para continuar...")
+
+    def adicionar_item_venda_rapida(self):
+        self.limpar_tela()
+        print(self.linha_separadora())
+        print("ADICIONAR PRODUTO")
+        print(self.linha_separadora())
+        
+        # Listar produtos disponíveis
+        produtos = self.sistema.consultar_produtos()
+        
+        if not produtos:
+            input("Não há produtos cadastrados. Pressione Enter para continuar...")
+            return
+        
+        print("\nProdutos disponíveis:")
+        print("-" * 50)
+        print(f"{'ID':<5} {'Nome':<20} {'Preço':<10} {'Categoria':<15} {'Estoque':<10}")
+        print("-" * 50)
+        
+        for produto in produtos:
+            print(f"{produto.id:<5} {produto.nome:<20} R${produto.preco:<8.2f} {produto.categoria:<15} {produto.estoque:<10}")
+        
+        print("-" * 50)
+        
+        try:
+            produto_id = int(input("\nDigite o ID do produto: "))
+            
+            if produto_id not in self.sistema.produtos:
+                print("Produto não encontrado.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            quantidade = int(input("Digite a quantidade: "))
+            
+            if quantidade <= 0:
+                print("Quantidade deve ser maior que zero.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            if self.sistema.produtos[produto_id].estoque < quantidade:
+                print("Estoque insuficiente.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            produto = self.sistema.produtos[produto_id]
+            item = ItemComanda(
+                produto_id=produto_id,
+                quantidade=quantidade,
+                nome_produto=produto.nome,
+                preco_unitario=produto.preco
+            )
+            
+            self.venda_atual.adicionar_item(item)
+            print(f"{quantidade}x {produto.nome} adicionado(s) à venda.")
+            
+        except ValueError:
+            print("Valor inválido.")
+        
+        input("Pressione Enter para continuar...")
+
+    def remover_item_venda_rapida(self):
+        if not self.venda_atual.itens:
+            input("Não há itens para remover. Pressione Enter para continuar...")
+            return
+        
+        self.limpar_tela()
+        print(self.linha_separadora())
+        print("REMOVER PRODUTO")
+        print(self.linha_separadora())
+        
+        print("\nItens na venda:")
+        print("-" * 50)
+        print(f"{'ID':<5} {'Qtd':<5} {'Produto':<30} {'Preço Unit.':<15} {'Subtotal':<15}")
+        print("-" * 50)
+        
+        for i, item in enumerate(self.venda_atual.itens, 1):
+            print(f"{i:<5} {item.quantidade:<5} {item.nome_produto:<30} R${item.preco_unitario:<13.2f} R${item.subtotal:<13.2f}")
+        
+        print("-" * 50)
+        
+        try:
+            item_id = int(input("\nDigite o número do item a remover: "))
+            
+            if item_id < 1 or item_id > len(self.venda_atual.itens):
+                print("Item não encontrado.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            item = self.venda_atual.itens[item_id - 1]
+            quantidade = int(input(f"Digite a quantidade a remover (máx: {item.quantidade}): "))
+            
+            if quantidade <= 0 or quantidade > item.quantidade:
+                print("Quantidade inválida.")
+                input("Pressione Enter para continuar...")
+                return
+            
+            self.venda_atual.remover_item(item.produto_id, quantidade)
+            print(f"{quantidade}x {item.nome_produto} removido(s) da venda.")
+            
+        except ValueError:
+            print("Valor inválido.")
+        
+        input("Pressione Enter para continuar...")
+
+    def finalizar_venda_rapida(self):
+        if not self.venda_atual.itens:
+            print("Não há itens na venda.")
+            input("Pressione Enter para continuar...")
+            return
+        
+        self.limpar_tela()
+        print(self.linha_separadora())
+        print("FINALIZAR VENDA")
+        print(self.linha_separadora())
+        
+        print("\nResumo da venda:")
+        print("-" * 50)
+        print(f"{'Qtd':<5} {'Produto':<30} {'Preço Unit.':<15} {'Subtotal':<15}")
+        print("-" * 50)
+        
+        for item in self.venda_atual.itens:
+            print(f"{item.quantidade:<5} {item.nome_produto:<30} R${item.preco_unitario:<13.2f} R${item.subtotal:<13.2f}")
+        
+        print("-" * 50)
+        print(f"{'TOTAL:':<36} R${self.venda_atual.calcular_total():<13.2f}")
+        print(self.linha_separadora())
+        
+        confirmar = input("Confirma a finalização da venda? (s/n): ")
+        
+        if confirmar.lower() == "s":
+            if self.sistema.registrar_venda_rapida(self.venda_atual):
+                print(f"Venda finalizada com sucesso! Total: R${self.venda_atual.calcular_total():.2f}")
+            else:
+                print("Erro ao finalizar venda.")
+        else:
+            print("Venda cancelada.")
+        
+        self.venda_atual = None
         input("Pressione Enter para continuar...")
 
 if __name__ == "__main__":
