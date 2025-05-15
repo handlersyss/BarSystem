@@ -70,6 +70,7 @@ class Comanda:
         self.hora_abertura = hora_abertura or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         self.hora_fechamento = None
         self.itens: List[ItemComanda] = []
+        self.nome_cliente: Optional[str] = None
     
     def adicionar_item(self, item: ItemComanda):
         # Verifica se o item já existe na comanda
@@ -110,7 +111,8 @@ class Comanda:
             "status": self.status,
             "hora_abertura": self.hora_abertura,
             "hora_fechamento": self.hora_fechamento,
-            "itens": [item.to_dict() for item in self.itens]
+            "itens": [item.to_dict() for item in self.itens],
+            "nome_cliente": self.nome_cliente
         }
     
     @classmethod
@@ -122,6 +124,7 @@ class Comanda:
             hora_abertura=data["hora_abertura"]
         )
         comanda.hora_fechamento = data.get("hora_fechamento")
+        comanda.nome_cliente = data.get("nome_cliente")
         for item_data in data.get("itens", []):
             item = ItemComanda.from_dict(item_data)
             comanda.itens.append(item)
@@ -191,10 +194,11 @@ class SistemaBar:
                     self.produtos[produto.id] = produto
                 
                 # Carregar comandas
-                cursor.execute('SELECT id, mesa, status, hora_abertura, hora_fechamento FROM comandas')
+                cursor.execute('SELECT id, mesa, status, hora_abertura, hora_fechamento, nome_cliente FROM comandas')
                 for row in cursor.fetchall():
                     comanda = Comanda(id=row[0], mesa=row[1], status=row[2], hora_abertura=row[3])
                     comanda.hora_fechamento = row[4]
+                    comanda.nome_cliente = row[5]
                     self.comandas[comanda.id] = comanda
                 
                 # Carregar itens das comandas
@@ -333,20 +337,21 @@ class SistemaBar:
             print(f"Erro ao remover produto: {e}")
             return False
     
-    def abrir_comanda(self, mesa: int) -> Optional[Comanda]:
+    def abrir_comanda(self, mesa: int, nome_cliente: str) -> Optional[Comanda]:
         """Abre uma nova comanda para uma mesa."""
         if mesa not in self.mesas or self.mesas[mesa] is not None:
             return None
         
         comanda = Comanda(id=self.proximo_id_comanda, mesa=mesa)
+        comanda.nome_cliente = nome_cliente
 
         try:
             with self._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    INSERT INTO comandas (id, mesa, status, hora_abertura)
-                    VALUES (?, ?, ?, ?)
-                ''', (comanda.id, comanda.mesa, comanda.status, comanda.hora_abertura))
+                    INSERT INTO comandas (id, mesa, status, hora_abertura, nome_cliente)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (comanda.id, comanda.mesa, comanda.status, comanda.hora_abertura, comanda.nome_cliente))
                 cursor.execute('UPDATE mesas SET comanda_id = ? WHERE id = ?', (comanda.id, mesa))
                 conn.commit()
                 
@@ -542,6 +547,28 @@ class SistemaBar:
             print(f"Erro ao registrar venda rápida: {e}")
             return False
 
+    def atualizar_nome_cliente(self, comanda_id: int, nome_cliente: str) -> bool:
+        """Atualiza o nome do cliente em uma comanda."""
+        if comanda_id not in self.comandas:
+            return False
+        
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    UPDATE comandas
+                    SET nome_cliente = ?
+                    WHERE id = ?
+                ''', (nome_cliente, comanda_id))
+                conn.commit()
+                
+                self.comandas[comanda_id].nome_cliente = nome_cliente
+                return True
+        
+        except sqlite3.Error as e:
+            print(f"Erro ao atualizar nome do cliente: {e}")
+            return False
+
 class InterfaceTerminal:
 
     def linha_simples(self):
@@ -730,15 +757,16 @@ class InterfaceTerminal:
             return
 
         print(f"Comandas registradas hoje ({hoje}):")
-        print(f"{'ID':<5} {'Nome':<20} {'Hora Abertura':<20} {'Hora Fechamento':<20} {'Total':<10}")
+        print(f"{'ID':<5} {'Mesa':<5} {'Cliente':<20} {'Status':<10} {'Hora Abertura':<20} {'Hora Fechamento':<20} {'Total':<10}")
         print(self.linha_separadora())
 
         for comanda in Comandas_dia:
             total = comanda.calcular_total()
             status = comanda.status
             hora_fechamento = comanda.hora_fechamento or "_"
+            nome_cliente = comanda.nome_cliente or "N/A"
 
-            print(f"{comanda.id:<5} {comanda.mesa:<5} {status:<10} {comanda.hora_abertura:<20} {hora_fechamento:<20} R${total:<8.2f}")
+            print(f"{comanda.id:<5} {comanda.mesa:<5} {nome_cliente:<20} {status:<10} {comanda.hora_abertura:<20} {hora_fechamento:<20} R${total:<8.2f}")
 
         print(self.linha_separadora())
         input("Pressione Enter para continuar...")
@@ -1125,11 +1153,23 @@ class InterfaceTerminal:
         if mesa not in mesas_livres:
             input("Mesa inválida ou ocupada. Pressione Enter para continuar...")
             return
+
+        nome_cliente = input("Digite o nome do cliente: ")
+        if nome_cliente.lower() in ['c', 'cancelar']:
+            print("Operação cancelada.")
+            input("Pressione Enter para continuar...")
+            return
         
-        comanda = self.sistema.abrir_comanda(mesa)
+        if not nome_cliente:
+            print("Nome do cliente não pode ser vazio.")
+            input("Pressione Enter para continuar...")
+            return
+        
+        comanda = self.sistema.abrir_comanda(mesa, nome_cliente)
         
         if comanda:
             print(f"Comanda {comanda.id} aberta para a mesa {mesa}.")
+            print(f"Nome do cliente: {comanda.nome_cliente}")
         else:
             print("Erro ao abrir comanda.")
         
@@ -1245,10 +1285,11 @@ class InterfaceTerminal:
             return
         
         self.limpar_tela()
-        print (self.linha_separadora())
+        print(self.linha_separadora())
         print(f"Comanda #{comanda.id} - Mesa {comanda.mesa}")
         print(f"Aberta em: {comanda.hora_abertura}")
-        print (self.linha_separadora())
+        print(f"Nome do cliente: {comanda.nome_cliente}")
+        print(self.linha_separadora())
         
         if not comanda.itens:
             print("Não há itens na comanda.")
@@ -1307,6 +1348,7 @@ class InterfaceTerminal:
         print(self.linha_separadora())
         print(f"Comanda #{comanda.id} - Mesa {comanda.mesa}")
         print(f"Aberta em: {comanda.hora_abertura}")
+        print(f"Nome do cliente: {comanda.nome_cliente}")
         print(self.linha_separadora())
         
         if not comanda.itens:
