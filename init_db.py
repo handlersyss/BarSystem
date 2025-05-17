@@ -82,7 +82,7 @@ def migrate_data():
                 cursor.execute('''
                     INSERT OR REPLACE INTO usuarios (id, nome_usuario, senha, nome_empresa)
                     VALUES (?, ?, ?, ?)
-                ''', (user['id'], user['nome_usuario'], user['senha'], user['nome_empresa']))
+                ''', (int(user_id), user['nome_usuario'], user['senha'], user['nome_empresa']))
 
     # Migrate produtos.json
     if os.path.exists('dados/produtos.json'):
@@ -92,7 +92,7 @@ def migrate_data():
                 cursor.execute('''
                     INSERT OR REPLACE INTO produtos (id, nome, preco, categoria, estoque)
                     VALUES (?, ?, ?, ?, ?)
-                ''', (prod['id'], prod['nome'], prod['preco'], prod['categoria'], prod['estoque']))
+                ''', (int(prod_id), prod['nome'], prod['preco'], prod['categoria'], prod['estoque']))
 
     # Migrate mesas.json
     if os.path.exists('dados/mesas.json'):
@@ -112,27 +112,24 @@ def migrate_data():
                 cursor.execute('''
                     INSERT OR REPLACE INTO comandas (id, mesa, status, hora_abertura, hora_fechamento, nome_cliente)
                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (comanda['id'], comanda['mesa'], comanda['status'], comanda['hora_abertura'], comanda['hora_fechamento'], comanda.get('nome_cliente')))
+                ''', (int(comanda_id), comanda['mesa'], comanda['status'], comanda['hora_abertura'], comanda['hora_fechamento'], comanda.get('nome_cliente')))
                 
                 # Migrate itens_comanda
                 for item in comanda.get('itens', []):
                     cursor.execute('''
                         INSERT INTO itens_comanda (comanda_id, produto_id, quantidade, nome_produto, preco_unitario, subtotal)
                         VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (comanda['id'], item['produto_id'], item['quantidade'], item['nome_produto'], item['preco_unitario'], item['subtotal']))
+                    ''', (int(comanda_id), item['produto_id'], item['quantidade'], item['nome_produto'], item['preco_unitario'], item['subtotal']))
 
     # Migrate contadores
     if os.path.exists('dados/contadores.json'):
         with open('dados/contadores.json', 'r', encoding='utf-8') as f:
             contadores = json.load(f)
-            cursor.execute('''
-                INSERT OR REPLACE INTO contadores (nome, valor)
-                VALUES (?, ?)
-            ''', ('proximo_id_produto', contadores.get('proximo_id_produto', 1)))
-            cursor.execute('''
-                INSERT OR REPLACE INTO contadores (nome, valor)
-                VALUES (?, ?)
-            ''', ('proximo_id_comanda', contadores.get('proximo_id_comanda', 1)))
+            for nome, valor in contadores.items():
+                cursor.execute('''
+                    INSERT OR REPLACE INTO contadores (nome, valor)
+                    VALUES (?, ?)
+                ''', (nome, valor))
 
     if os.path.exists('dados/contador_usuario.json'):
         with open('dados/contador_usuario.json', 'r', encoding='utf-8') as f:
