@@ -39,6 +39,7 @@ def create_database():
             status TEXT NOT NULL,
             hora_abertura TEXT NOT NULL,
             hora_fechamento TEXT,
+            nome_cliente TEXT,
             FOREIGN KEY (mesa) REFERENCES mesas(id)
         );
 
@@ -109,9 +110,9 @@ def migrate_data():
             comandas = json.load(f)
             for comanda_id, comanda in comandas.items():
                 cursor.execute('''
-                    INSERT OR REPLACE INTO comandas (id, mesa, status, hora_abertura, hora_fechamento)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (comanda['id'], comanda['mesa'], comanda['status'], comanda['hora_abertura'], comanda['hora_fechamento']))
+                    INSERT OR REPLACE INTO comandas (id, mesa, status, hora_abertura, hora_fechamento, nome_cliente)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (comanda['id'], comanda['mesa'], comanda['status'], comanda['hora_abertura'], comanda['hora_fechamento'], comanda.get('nome_cliente')))
                 
                 # Migrate itens_comanda
                 for item in comanda.get('itens', []):
