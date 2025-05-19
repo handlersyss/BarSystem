@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import os
+import bcrypt
 
 def create_database():
     """Cria o banco de dados e as tabelas necessárias."""
@@ -15,7 +16,7 @@ def create_database():
         CREATE TABLE IF NOT EXISTS usuarios (
             id INTEGER PRIMARY KEY,
             nome_usuario TEXT NOT NULL UNIQUE,
-            senha TEXT NOT NULL,
+            senha_hash TEXT NOT NULL,
             nome_empresa TEXT NOT NULL
         );
 
@@ -79,10 +80,15 @@ def migrate_data():
         with open('dados/usuarios.json', 'r', encoding='utf-8') as f:
             usuarios = json.load(f)
             for user_id, user in usuarios.items():
+                # Criptografa a senha antes de salvar
+                senha_bytes = user['senha'].encode('utf-8')
+                salt = bcrypt.gensalt()
+                senha_hash = bcrypt.hashpw(senha_bytes, salt)
+                
                 cursor.execute('''
-                    INSERT OR REPLACE INTO usuarios (id, nome_usuario, senha, nome_empresa)
+                    INSERT OR REPLACE INTO usuarios (id, nome_usuario, senha_hash, nome_empresa)
                     VALUES (?, ?, ?, ?)
-                ''', (int(user_id), user['nome_usuario'], user['senha'], user['nome_empresa']))
+                ''', (int(user_id), user['nome_usuario'], senha_hash.decode('utf-8'), user['nome_empresa']))
 
     # Migrate produtos.json
     if os.path.exists('dados/produtos.json'):
