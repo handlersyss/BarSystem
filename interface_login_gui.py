@@ -15,7 +15,7 @@ class LoginWindow(ctk.CTk):
         self.resizable(False, False)
         
         # Carregar imagem de fundo
-        img_path = "img/painel_500x400.png"
+        img_path = "img/painel2_800x600.png"
         if os.path.exists(img_path):
             self.bg_img = Image.open(img_path)
             self.bg_img = self.bg_img.resize((800, 600), Image.LANCZOS)
@@ -27,7 +27,11 @@ class LoginWindow(ctk.CTk):
         # Frame principal transparente
         self.main_frame = ctk.CTkFrame(self, fg_color="white")
         self.main_frame.place(relx=0.65, rely=0.5, anchor="center")
-        
+        """
+        # Frame para a logo "Bem-vindo"
+        self.main_frame_after = ctk.CTkFrame(self, fg_color="transparent")
+        self.main_frame_after.place(relx=0.03, rely=0.15, anchor="nw")
+        """
         # Caminho para a fonte
         font_path = os.path.join("img/pixel_operator/PixelOperator8.ttf")
 
@@ -48,7 +52,16 @@ class LoginWindow(ctk.CTk):
             self.logo_img_tk = ImageTk.PhotoImage(self.logo_img)
             logo_label = ctk.CTkLabel(self.main_frame, image=self.logo_img_tk, text="", fg_color="transparent")
             logo_label.pack(pady=20)
-
+        """
+        # Logo com título em imagem PNG (BEM VINDO)
+        logo_b_path = "img/Bem_vindo_112,52.png"
+        if os.path.exists(logo_b_path):
+            self.logo_b_img = Image.open(logo_b_path)
+            self.logo_b_img = self.logo_b_img.resize((178, 82), Image.LANCZOS)
+            self.logo_b_img_tk = ImageTk.PhotoImage(self.logo_b_img)
+            logo_b_label = ctk.CTkLabel(self.main_frame_after, image=self.logo_b_img_tk, text="", fg_color="transparent", bg_color="transparent")
+            logo_b_label.pack(pady=20)
+        """
         # Frame para os campos de login
         login_frame = ctk.CTkFrame(self.main_frame, fg_color="white")
         login_frame.pack(pady=20)
@@ -83,18 +96,19 @@ class LoginWindow(ctk.CTk):
             command=self.try_login
         )
         login_button.pack(pady=10)
-        
-        register_button = ctk.CTkButton(
-            login_frame,
-            text="Cadastrar",
-            width=300,
+
+        # Adicione o botão de cadastro na lateral esquerda
+        register_button_lateral = ctk.CTkButton(
+            self,
+            text="CADASTRAR",
+            width=180,
             height=40,
-            font=ctk.CTkFont(size=14, weight="bold"),
-            fg_color="#2196F3",
-            hover_color="#1976D2",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            fg_color="#404E96",
+            hover_color="#5968d8",
             command=self.show_register_window
         )
-        register_button.pack(pady=10)
+        register_button_lateral.place(x=20, y=485)
     
     def try_login(self):
         username = self.username_input.get()
