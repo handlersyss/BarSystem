@@ -1,6 +1,9 @@
 import customtkinter as ctk
+import tkinter as tk
+from PIL import Image, ImageTk
 import os
 from register_window import RegisterWindow
+from customtkinter import CTkFont
 
 class LoginWindow(ctk.CTk):
     def __init__(self):
@@ -11,24 +14,43 @@ class LoginWindow(ctk.CTk):
         self.geometry("800x600")
         self.resizable(False, False)
         
-        # Configurar tema
-        ctk.set_appearance_mode("light")
-        ctk.set_default_color_theme("blue")
+        # Carregar imagem de fundo
+        img_path = "img/painel_500x400.png"
+        if os.path.exists(img_path):
+            self.bg_img = Image.open(img_path)
+            self.bg_img = self.bg_img.resize((800, 600), Image.LANCZOS)
+            self.bg_img_tk = ImageTk.PhotoImage(self.bg_img)
+
+            self.bg_label = tk.Label(self, image=self.bg_img_tk, borderwidth=0)
+            self.bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+
+        # Frame principal transparente
+        self.main_frame = ctk.CTkFrame(self, fg_color="white")
+        self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
         
-        # Frame principal
-        self.main_frame = ctk.CTkFrame(self)
-        self.main_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        # Título
-        title_label = ctk.CTkLabel(
-            self.main_frame,
-            text="Bar System",
-            font=ctk.CTkFont(size=32, weight="bold")
-        )
-        title_label.pack(pady=20)
-        
+        # Caminho para a fonte
+        font_path = os.path.join("img/pixel_operator/PixelOperator8.ttf")
+
+        # Registrar a fonte no sistema (apenas para a sessão do Tkinter)
+        if os.path.exists(font_path):
+            import tkinter.font as tkfont
+            tkfont.Font(family="PixelOperator8", size=32, weight="bold")  # registra a família
+            self.tk.call("font", "create", "PixelOperator8", "-family", "PixelOperator8", "-size", 32, "-weight", "bold")
+            pixel_font = CTkFont(family="Pixel Operator 8", size=32, weight="bold")
+        else:
+            pixel_font = CTkFont(size=32, weight="bold")  # fallback
+
+        # Logo com título em imagem PNG
+        logo_path = "img/Logo_600x600.png"  # ajuste o caminho conforme o seu arquivo
+        if os.path.exists(logo_path):
+            self.logo_img = Image.open(logo_path)
+            self.logo_img = self.logo_img.resize((200, 200), Image.LANCZOS)  # ajuste o tamanho se quiser
+            self.logo_img_tk = ImageTk.PhotoImage(self.logo_img)
+            logo_label = ctk.CTkLabel(self.main_frame, image=self.logo_img_tk, text="", fg_color="transparent")
+            logo_label.pack(pady=20)
+
         # Frame para os campos de login
-        login_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        login_frame = ctk.CTkFrame(self.main_frame, fg_color="white")
         login_frame.pack(pady=20)
         
         # Campos de login
