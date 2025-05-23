@@ -32,17 +32,6 @@ class LoginWindow(ctk.CTk):
         self.main_frame_after = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame_after.place(relx=0.03, rely=0.15, anchor="nw")
         """
-        # Caminho para a fonte
-        font_path = os.path.join("img/pixel_operator/PixelOperator8.ttf")
-
-        # Registrar a fonte no sistema (apenas para a sessão do Tkinter)
-        if os.path.exists(font_path):
-            import tkinter.font as tkfont
-            tkfont.Font(family="PixelOperator8", size=32, weight="bold")  # registra a família
-            self.tk.call("font", "create", "PixelOperator8", "-family", "PixelOperator8", "-size", 32, "-weight", "bold")
-            pixel_font = CTkFont(family="Pixel Operator 8", size=32, weight="bold")
-        else:
-            pixel_font = CTkFont(size=32, weight="bold")  # fallback
 
         # Logo com título em imagem PNG
         logo_path = "img/Logo_600x600.png" 
@@ -106,7 +95,8 @@ class LoginWindow(ctk.CTk):
             font=ctk.CTkFont(size=20, weight="bold"),
             fg_color="#404E96",
             hover_color="#5968d8",
-            command=self.show_register_window
+            command=self.show_register_window,
+            corner_radius=20
         )
         register_button_lateral.place(x=20, y=485)
     
