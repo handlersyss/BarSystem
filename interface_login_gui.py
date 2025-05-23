@@ -26,7 +26,7 @@ class LoginWindow(ctk.CTk):
 
         # Frame principal transparente
         self.main_frame = ctk.CTkFrame(self, fg_color="white")
-        self.main_frame.place(relx=0.5, rely=0.5, anchor="center")
+        self.main_frame.place(relx=0.65, rely=0.5, anchor="center")
         
         # Caminho para a fonte
         font_path = os.path.join("img/pixel_operator/PixelOperator8.ttf")
@@ -41,10 +41,10 @@ class LoginWindow(ctk.CTk):
             pixel_font = CTkFont(size=32, weight="bold")  # fallback
 
         # Logo com título em imagem PNG
-        logo_path = "img/Logo_600x600.png"  # ajuste o caminho conforme o seu arquivo
+        logo_path = "img/Logo_600x600.png" 
         if os.path.exists(logo_path):
             self.logo_img = Image.open(logo_path)
-            self.logo_img = self.logo_img.resize((200, 200), Image.LANCZOS)  # ajuste o tamanho se quiser
+            self.logo_img = self.logo_img.resize((200, 200), Image.LANCZOS)
             self.logo_img_tk = ImageTk.PhotoImage(self.logo_img)
             logo_label = ctk.CTkLabel(self.main_frame, image=self.logo_img_tk, text="", fg_color="transparent")
             logo_label.pack(pady=20)
@@ -109,7 +109,7 @@ class LoginWindow(ctk.CTk):
     
     def show_register_window(self):
         self.register_window = RegisterWindow()
-        self.register_window.grab_set()  # Torna a janela modal
+        self.register_window.grab_set()
     
     def show_error(self, message):
         dialog = ctk.CTkInputDialog(
