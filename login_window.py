@@ -1,7 +1,9 @@
+import subprocess
 import sys
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QSpacerItem, QSizePolicy
 )
+from PyQt5.QtWidgets import *
 from PyQt5.QtGui import QPixmap, QFont, QColor
 from PyQt5.QtCore import Qt
 from register_window import RegisterWindow
@@ -80,6 +82,10 @@ class LoginWindow(QWidget):
         right_spacer = QFrame()
         main_layout.addWidget(right_spacer)
 
+        login_btn.clicked.connect(self.executar_sistema_terminal)
+        login_layout.addWidget(login_btn)
+
+
         # Botão cadastrar no canto inferior esquerdo
         self.register_btn = QPushButton('Cadastrar', self)
         self.register_btn.setFont(QFont('Arial', 14, QFont.Bold))
@@ -98,6 +104,13 @@ class LoginWindow(QWidget):
         self.bg_label.resize(self.size())
         self.register_btn.raise_()
         super().resizeEvent(event)
+
+    def executar_sistema_terminal(self):
+        try:
+            subprocess.Popen(['python3', 'barsystem.py'])
+            self.close()
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", f"Erro ao executar sistema: {str(e)}")
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
