@@ -4,13 +4,15 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QFrame, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QPixmap, QFont, QColor
+from PyQt5.QtGui import QPixmap, QFont, QColor, QIcon
 from PyQt5.QtCore import Qt
 from register_window import RegisterWindow
+
 
 class LoginWindow(QWidget):
     def __init__(self):
         super().__init__()
+        app.setWindowIcon(QIcon('img/logo2_600x600.ico'))
         self.setWindowTitle('Bar System - Login')
         self.setFixedSize(800, 600)
 
@@ -111,6 +113,15 @@ class LoginWindow(QWidget):
             self.close()
         except Exception as e:
             QMessageBox.warning(self, "Erro", f"Erro ao executar sistema: {str(e)}")
+
+    def main():
+        app = QApplication(sys.argv)
+        app.setWindowIcon(QIcon('img/logo2_600x600.ico'))
+
+        login_window = LoginWindow()
+        login_window.show ()
+
+        sys.exit(app.exec_())
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
